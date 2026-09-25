@@ -135,8 +135,10 @@ export default function CharacterTracker() {
     window.addEventListener('resize', handleResize);
 
     const handlePointerMove = (clientX, clientY) => {
-      stateRef.current.mouseX = clientX;
-      stateRef.current.mouseY = clientY;
+      if (!canvasRef.current) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      stateRef.current.mouseX = clientX - rect.left;
+      stateRef.current.mouseY = clientY - rect.top;
       stateRef.current.hasMoved = true;
     };
 
@@ -164,6 +166,12 @@ export default function CharacterTracker() {
     const render = () => {
       animId = requestAnimationFrame(render);
 
+      // Culling: If hero canvas is scrolled off-screen, skip render to save 100% GPU
+      const rect = canvas.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= window.innerHeight) {
+        return;
+      }
+
       const s = stateRef.current;
       const { images, centerImage, mouseX, mouseY, hasMoved, dpr } = s;
 
@@ -176,21 +184,25 @@ export default function CharacterTracker() {
 
       let drawWidth, drawHeight, drawX, drawY;
       const isMobile = screenWidth < 768;
+      const isDesktop = screenWidth >= 1024;
 
       if (isMobile) {
-        drawHeight = Math.min(screenHeight * 0.72, screenWidth * 1.25);
+        drawHeight = Math.min(screenHeight * 0.70, screenWidth * 1.25);
         drawWidth = drawHeight * frameAspect;
         drawX = (screenWidth - drawWidth) / 2;
-        drawY = screenHeight * 0.04;
+        drawY = screenHeight * 0.05;
       } else if (screenAspect > frameAspect) {
         drawHeight = Math.min(screenWidth / frameAspect, screenHeight * 1.15);
         drawWidth = drawHeight * frameAspect;
-        drawX = (screenWidth - drawWidth) / 2;
+        // On desktop, shift character slightly to the right to frame left hero content cleanly
+        const rightShift = isDesktop ? Math.min(screenWidth * 0.14, 220) : 0;
+        drawX = (screenWidth - drawWidth) / 2 + rightShift;
         drawY = screenHeight - drawHeight;
       } else {
         drawHeight = screenHeight * 1.05;
         drawWidth = drawHeight * frameAspect;
-        drawX = (screenWidth - drawWidth) / 2;
+        const rightShift = isDesktop ? Math.min(screenWidth * 0.14, 220) : 0;
+        drawX = (screenWidth - drawWidth) / 2 + rightShift;
         drawY = screenHeight - drawHeight;
       }
 
@@ -222,7 +234,7 @@ export default function CharacterTracker() {
         // Circular interpolation (shortest path) with factor 0.26
         s.currentAngle = lerpAngle(s.currentAngle, targetAlpha, 0.26);
 
-        // Map smoothed angle to 0..63
+        // Map smoothed angle to 0..127
         const normalized = (s.currentAngle % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
         const frameIdx = Math.round((normalized / (Math.PI * 2)) * TOTAL_FRAMES) % TOTAL_FRAMES;
 
